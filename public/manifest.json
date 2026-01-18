@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "Chat Outline Sidebar",
+  "version": "0.1.0",
+  "description": "Adds a structured outline sidebar and folding controls to ChatGPT and Gemini.",
+  "action": {
+    "default_title": "Chat Outline Sidebar"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://gemini.google.com/*",
+        "https://business.gemini.google/*"
+      ],
+      "js": [
+        "content/index.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "permissions": []
+}
