@@ -893,7 +893,8 @@ const createFolderPanel = (): HTMLElement => {
 const findHistoryContainer = () =>
   document.querySelector<HTMLElement>('#history') ||
   document.querySelector<HTMLElement>('[data-testid="history"]') ||
-  document.querySelector<HTMLElement>('[data-testid="history-list"]');
+  document.querySelector<HTMLElement>('[data-testid="history-list"]') ||
+  document.querySelector<HTMLElement>('[data-test-id="all-conversations"]');
 
 const injectFolderPanel = () => {
   const history = findHistoryContainer();
@@ -916,6 +917,12 @@ const injectFolderPanel = () => {
 let activeMenuConversationId = '';
 
 const findOpenMenu = () => {
+  const geminiConversationMenu = document.querySelector<HTMLElement>(
+    '.mat-mdc-menu-panel.conversation-actions-menu'
+  );
+  if (geminiConversationMenu && geminiConversationMenu.offsetParent !== null) {
+    return geminiConversationMenu;
+  }
   const menus = Array.from(document.querySelectorAll<HTMLElement>('[role="menu"]'));
   const visibleMenus = menus.filter((menu) => menu.offsetParent !== null);
   if (visibleMenus.length > 0) {
@@ -925,10 +932,12 @@ const findOpenMenu = () => {
     document.querySelectorAll<HTMLElement>('[data-radix-popper-content-wrapper]')
   );
   const visibleWrapper = wrappers.find((wrapper) => wrapper.offsetParent !== null);
-  if (!visibleWrapper) {
-    return null;
+  if (visibleWrapper) {
+    return visibleWrapper;
   }
-  return visibleWrapper;
+  const panels = Array.from(document.querySelectorAll<HTMLElement>('.mat-mdc-menu-panel'));
+  const visiblePanel = panels.find((panel) => panel.offsetParent !== null);
+  return visiblePanel ?? null;
 };
 
 const buildFolderMenu = (conversationId: string) => {
@@ -1087,37 +1096,96 @@ const injectFolderMenuItem = (menu: HTMLElement, conversationId: string) => {
     showFolderMenu(conversationId, entry);
   });
 
-  menu.appendChild(entry);
+  const menuContent =
+    menu.querySelector<HTMLElement>('.mat-mdc-menu-content') ??
+    menu.querySelector<HTMLElement>('[role="menu"]') ??
+    menu;
+
+  const clone = entry.cloneNode(true) as HTMLElement;
+  clone.classList.add('oa-folder-entry');
+  clone.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    showFolderMenu(conversationId, clone);
+  });
+
+  [entry, clone].forEach((node) => {
+    if (!node.hasAttribute('role')) {
+      node.setAttribute('role', 'menuitem');
+    }
+    node.setAttribute('tabindex', '0');
+  });
+
+  menuContent.appendChild(entry);
+  menuContent.appendChild(clone);
+
+  if (menuContent.contains(entry) && menuContent.contains(clone)) {
+    menuContent.removeChild(clone);
+  }
+};
+
+const getConversationIdFromElement = (element: HTMLElement) => {
+  const href = element.getAttribute('href');
+  if (href) {
+    const match = href.match(/\/c\/([a-f0-9-]+)/i);
+    if (match) {
+      return match[1];
+    }
+  }
+  const jslog = element.getAttribute('jslog') || '';
+  const jslogMatch = jslog.match(/c_([a-f0-9]+)/i);
+  if (jslogMatch) {
+    return `c_${jslogMatch[1]}`;
+  }
+  const testId = element.getAttribute('data-test-id');
+  if (testId && testId.startsWith('conversation')) {
+    const key = element.getAttribute('jslog');
+    if (key) {
+      return key;
+    }
+  }
+  return null;
+};
+
+const getConversationIdFromMenu = (menu: HTMLElement) => {
+  const menuItems = Array.from(menu.querySelectorAll<HTMLElement>('[jslog]'));
+  for (const item of menuItems) {
+    const jslog = item.getAttribute('jslog') || '';
+    const match = jslog.match(/c_([a-f0-9]+)/i);
+    if (match) {
+      return `c_${match[1]}`;
+    }
+  }
+  return null;
 };
 
 const applyFolderFilter = () => {
-  const conversationLinks = Array.from(
+  const chatgptItems = Array.from(
     document.querySelectorAll<HTMLAnchorElement>('a[data-sidebar-item="true"][href*="/c/"]')
   );
+  const geminiItems = Array.from(
+    document.querySelectorAll<HTMLElement>('[data-test-id="conversation"]')
+  );
+  const items: HTMLElement[] = [...chatgptItems, ...geminiItems];
   const allowedFolderIds = activeFolderId
     ? getDescendantIds(activeFolderId, folderState.folders)
     : new Set<string>();
 
-  conversationLinks.forEach((link) => {
-    const href = link.getAttribute('href');
-    if (!href) {
+  items.forEach((item) => {
+    const conversationId = getConversationIdFromElement(item);
+    if (!conversationId) {
       return;
     }
-    const match = href.match(/\/c\/([a-f0-9-]+)/i);
-    if (!match) {
-      return;
-    }
-    const conversationId = match[1];
     const assignedFolderId = folderState.assignments[conversationId];
 
     if (!activeFolderId) {
-      link.style.display = '';
+      item.style.display = '';
       return;
     }
 
     const isVisible =
       assignedFolderId && allowedFolderIds.has(assignedFolderId);
-    link.style.display = isVisible ? '' : 'none';
+    item.style.display = isVisible ? '' : 'none';
   });
 };
 
@@ -1323,29 +1391,38 @@ const initLeftSidebarFolders = () => {
       return;
     }
     const menuTrigger = target.closest<HTMLElement>('[data-trailing-button]');
-    if (!menuTrigger) {
+    const geminiMenuTrigger = target.closest<HTMLElement>('[data-test-id="actions-menu-button"]');
+    const geminiConversation = target.closest<HTMLElement>('[data-test-id="conversation"]');
+    if (!menuTrigger && !geminiMenuTrigger) {
       return;
     }
-    const link = menuTrigger.closest<HTMLAnchorElement>('a[data-sidebar-item="true"][href*="/c/"]');
-    if (!link) {
+
+    const conversationAnchor = menuTrigger
+      ? menuTrigger.closest<HTMLAnchorElement>('a[data-sidebar-item="true"][href*="/c/"]')
+      : null;
+
+    const conversationElement = conversationAnchor ?? geminiConversation;
+    if (!conversationElement) {
       return;
     }
-    const href = link.getAttribute('href');
-    if (!href) {
+
+    const conversationId = getConversationIdFromElement(conversationElement);
+    if (!conversationId) {
       return;
     }
-    const match = href.match(/\/c\/([a-f0-9-]+)/i);
-    if (!match) {
-      return;
-    }
-    const conversationId = match[1];
+
     activeMenuConversationId = conversationId;
-    requestAnimationFrame(() => {
+    const attemptInject = () => {
       const menu = findOpenMenu();
       if (!menu) {
         return;
       }
-      injectFolderMenuItem(menu, conversationId);
+      const inferredId = getConversationIdFromMenu(menu) ?? conversationId;
+      injectFolderMenuItem(menu, inferredId);
+    };
+    requestAnimationFrame(attemptInject);
+    [50, 100, 150, 250, 400].forEach((delay) => {
+      window.setTimeout(attemptInject, delay);
     });
   });
 
@@ -1361,7 +1438,11 @@ const initLeftSidebarFolders = () => {
   });
 };
 
-if (window.location.hostname.includes('chatgpt.com')) {
+if (
+  window.location.hostname.includes('chatgpt.com') ||
+  window.location.hostname.includes('gemini.google.com') ||
+  window.location.hostname.includes('business.gemini.google')
+) {
   initLeftSidebarFolders();
 }
 
