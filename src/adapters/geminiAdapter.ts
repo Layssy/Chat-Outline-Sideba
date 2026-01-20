@@ -34,9 +34,9 @@ export class GeminiAdapter implements IAdapter {
       summary: '.query-text'
     },
     {
-      user: '.question-wrapper',
+      user: '.question-wrapper, .question-block',
       assistant: 'ucs-summary, .turn ucs-summary',
-      summary: 'ucs-fast-markdown, .question-wrapper, .markdown-document'
+      summary: 'ucs-fast-markdown, .question-wrapper, .question-block, .markdown-document'
     }
   ];
 
@@ -54,9 +54,9 @@ export class GeminiAdapter implements IAdapter {
 
     if (turnPairs.length) {
       for (let index = 0; index < turnPairs.length; index += 1) {
-        const { userElement, aiElement } = turnPairs[index];
+        const { userElement, aiElement, turnElement } = turnPairs[index];
         const summary = this.extractSummary(userElement);
-        const id = `gemini-${index}`;
+        const id = this.buildTurnId(index, userElement, turnElement);
         const isFolded = this.foldedState.get(id) ?? false;
 
         this.ensureFoldButton(userElement, id);
@@ -92,7 +92,7 @@ export class GeminiAdapter implements IAdapter {
       }
 
       const summary = this.extractSummary(userElement);
-      const id = `gemini-${index}`;
+      const id = this.buildTurnId(index, userElement);
       const isFolded = this.foldedState.get(id) ?? false;
 
       this.ensureFoldButton(userElement, id);
@@ -129,6 +129,14 @@ export class GeminiAdapter implements IAdapter {
   }
 
   private extractSummary(userElement: HTMLElement): string {
+    const fastMarkdown = userElement.querySelector<HTMLElement>('ucs-fast-markdown');
+    if (fastMarkdown?.shadowRoot) {
+      const doc = fastMarkdown.shadowRoot.querySelector<HTMLElement>('.markdown-document');
+      if (doc?.textContent?.trim()) {
+        return doc.textContent.trim().slice(0, 80);
+      }
+    }
+
     for (const set of this.selectorSets) {
       const candidate = userElement.querySelector(set.summary);
       if (candidate?.textContent?.trim()) {
@@ -136,9 +144,8 @@ export class GeminiAdapter implements IAdapter {
       }
     }
 
-    const directFastMarkdown = userElement.querySelector('ucs-fast-markdown');
-    if (directFastMarkdown?.textContent?.trim()) {
-      return directFastMarkdown.textContent.trim().slice(0, 80);
+    if (fastMarkdown?.textContent?.trim()) {
+      return fastMarkdown.textContent.trim().slice(0, 80);
     }
 
     return userElement.textContent?.trim().slice(0, 80) || 'User prompt';
@@ -154,19 +161,62 @@ export class GeminiAdapter implements IAdapter {
     });
   }
 
-  private collectTurnPairs(): Array<{ userElement: HTMLElement; aiElement: HTMLElement }> {
-    const pairs: Array<{ userElement: HTMLElement; aiElement: HTMLElement }> = [];
-    const turns = document.querySelectorAll<HTMLElement>('.turn');
+  private collectTurnPairs(): Array<{
+    userElement: HTMLElement;
+    aiElement: HTMLElement;
+    turnElement?: HTMLElement;
+  }> {
+    const pairs: Array<{ userElement: HTMLElement; aiElement: HTMLElement; turnElement?: HTMLElement }> = [];
+    const turns = this.collectTurnElements();
 
     turns.forEach((turn) => {
-      const question = turn.querySelector<HTMLElement>('.question-wrapper');
+      const question = turn.querySelector<HTMLElement>('.question-wrapper, .question-block');
       const summary = turn.querySelector<HTMLElement>('ucs-summary');
       if (question && summary) {
-        pairs.push({ userElement: question, aiElement: summary });
+        pairs.push({ userElement: question, aiElement: summary, turnElement: turn });
       }
     });
 
     return pairs;
+  }
+
+  private collectTurnElements(): HTMLElement[] {
+    const collected = new Set<HTMLElement>();
+
+    const ucsConversations = Array.from(document.querySelectorAll<HTMLElement>('ucs-conversation'));
+    ucsConversations.forEach((conversation) => {
+      const root = conversation.shadowRoot;
+      if (!root) {
+        return;
+      }
+      const main = root.querySelector<HTMLElement>('.main') ?? root;
+      main.querySelectorAll<HTMLElement>('.turn').forEach((turn) => collected.add(turn));
+    });
+
+    document.querySelectorAll<HTMLElement>('.turn').forEach((turn) => collected.add(turn));
+
+    return Array.from(collected);
+  }
+
+  private buildTurnId(index: number, userElement: HTMLElement, turnElement?: HTMLElement): string {
+    const queryIndex =
+      userElement.getAttribute('data-query-index') ??
+      turnElement?.getAttribute('data-query-index');
+
+    if (queryIndex) {
+      return `gemini-q-${queryIndex}`;
+    }
+
+    const markdown = userElement.querySelector<HTMLElement>('ucs-fast-markdown');
+    const turnIndex =
+      markdown?.getAttribute('data-turn-index') ??
+      turnElement?.getAttribute('data-turn-index');
+
+    if (turnIndex) {
+      return `gemini-t-${turnIndex}`;
+    }
+
+    return `gemini-${index}`;
   }
 
   private collectMessageContainers(): HTMLElement[] {
@@ -216,6 +266,7 @@ export class GeminiAdapter implements IAdapter {
     button.type = 'button';
     button.className = 'oa-fold-btn';
     button.setAttribute('aria-label', 'Toggle fold');
+    button.setAttribute('aria-expanded', 'true');
     button.addEventListener('click', (event) => {
       event.stopPropagation();
       const next = !(this.foldedState.get(id) ?? false);
@@ -226,11 +277,14 @@ export class GeminiAdapter implements IAdapter {
   }
 
   private applyFoldState(element: HTMLElement, isFolded: boolean): void {
-    element.style.maxHeight = isFolded ? '40px' : '';
-    element.style.overflow = isFolded ? 'hidden' : '';
-    element.style.position = isFolded ? 'relative' : '';
+    const foldTarget = this.resolveFoldTarget(element);
+
+    foldTarget.style.maxHeight = isFolded ? '40px' : '';
+    foldTarget.style.overflow = isFolded ? 'hidden' : '';
+    foldTarget.style.position = isFolded ? 'relative' : '';
+
     const placeholderId = 'oa-fold-placeholder';
-    let placeholder = element.querySelector<HTMLElement>(`#${placeholderId}`);
+    let placeholder = foldTarget.querySelector<HTMLElement>(`#${placeholderId}`);
 
     if (isFolded) {
       if (!placeholder) {
@@ -249,7 +303,7 @@ export class GeminiAdapter implements IAdapter {
         placeholder.style.fontSize = '12px';
         placeholder.style.color = '#555';
         placeholder.style.pointerEvents = 'none';
-        element.appendChild(placeholder);
+        foldTarget.appendChild(placeholder);
       }
     } else if (placeholder) {
       placeholder.remove();
@@ -259,9 +313,27 @@ export class GeminiAdapter implements IAdapter {
     if (toggle) {
       if (isFolded) {
         toggle.classList.add('oa-folded');
+        toggle.setAttribute('aria-expanded', 'false');
       } else {
         toggle.classList.remove('oa-folded');
+        toggle.setAttribute('aria-expanded', 'true');
       }
     }
+  }
+
+  private resolveFoldTarget(element: HTMLElement): HTMLElement {
+    if (element.shadowRoot) {
+      const markdown = element.shadowRoot.querySelector<HTMLElement>('.markdown-document');
+      if (markdown) {
+        return markdown;
+      }
+    }
+
+    const directMarkdown = element.querySelector<HTMLElement>('.markdown-document');
+    if (directMarkdown) {
+      return directMarkdown;
+    }
+
+    return element;
   }
 }

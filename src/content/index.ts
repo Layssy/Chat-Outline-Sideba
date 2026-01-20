@@ -1101,27 +1101,21 @@ const injectFolderMenuItem = (menu: HTMLElement, conversationId: string) => {
     menu.querySelector<HTMLElement>('[role="menu"]') ??
     menu;
 
-  const clone = entry.cloneNode(true) as HTMLElement;
-  clone.classList.add('oa-folder-entry');
-  clone.addEventListener('click', (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    showFolderMenu(conversationId, clone);
-  });
-
-  [entry, clone].forEach((node) => {
-    if (!node.hasAttribute('role')) {
-      node.setAttribute('role', 'menuitem');
-    }
-    node.setAttribute('tabindex', '0');
-  });
-
-  menuContent.appendChild(entry);
-  menuContent.appendChild(clone);
-
-  if (menuContent.contains(entry) && menuContent.contains(clone)) {
-    menuContent.removeChild(clone);
+  const existingEntries = menuContent.querySelectorAll('.oa-folder-entry');
+  if (existingEntries.length > 0) {
+    return;
   }
+
+  if (!entry.hasAttribute('role')) {
+    entry.setAttribute('role', 'menuitem');
+  }
+  entry.setAttribute('tabindex', '0');
+
+  const separator = document.createElement('div');
+  separator.className = 'oa-folder-menu-separator';
+
+  menuContent.appendChild(separator);
+  menuContent.appendChild(entry);
 };
 
 const getConversationIdFromElement = (element: HTMLElement) => {
@@ -1323,9 +1317,8 @@ const initLeftSidebarFolders = () => {
       name: name.trim()
     };
     folderState.folders.push(newFolder);
-    const targetConversationId = conversationId || activeMenuConversationId;
-    if (targetConversationId) {
-      folderState.assignments[targetConversationId] = newFolder.id;
+    if (conversationId) {
+      folderState.assignments[conversationId] = newFolder.id;
     }
     saveFolderState(folderState);
     updateFolderTree(folderState.folders);

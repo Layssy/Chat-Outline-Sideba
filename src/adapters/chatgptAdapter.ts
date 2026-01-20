@@ -106,6 +106,7 @@ export class ChatGPTAdapter implements IAdapter {
     button.type = 'button';
     button.className = 'oa-fold-btn';
     button.setAttribute('aria-label', 'Toggle fold');
+    button.setAttribute('aria-expanded', 'true');
     button.addEventListener('click', (event) => {
       event.stopPropagation();
       const next = !(this.foldedState.get(id) ?? false);
@@ -149,8 +150,10 @@ export class ChatGPTAdapter implements IAdapter {
     if (toggle) {
       if (isFolded) {
         toggle.classList.add('oa-folded');
+        toggle.setAttribute('aria-expanded', 'false');
       } else {
         toggle.classList.remove('oa-folded');
+        toggle.setAttribute('aria-expanded', 'true');
       }
     }
   }
