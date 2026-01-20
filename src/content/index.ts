@@ -11,7 +11,6 @@ const defaultColor = '#0a0f1a';
 
 const setCollapsed = (
   sidebar: HTMLElement | null,
-  handle: HTMLElement | null,
   collapsed: boolean
 ) => {
   if (sidebar) {
@@ -20,9 +19,6 @@ const setCollapsed = (
     } else {
       sidebar.classList.remove('oa-collapsed');
     }
-  }
-  if (handle) {
-    handle.classList.toggle('oa-collapsed', collapsed);
   }
   window.localStorage.setItem(collapseKey, collapsed ? '1' : '0');
 };
@@ -112,38 +108,6 @@ style.textContent = `
     padding: 6px 4px;
     border-radius: 20px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1), 0 0 20px rgba(0, 229, 255, 0.05);
-  }
-  .oa-handle {
-    position: fixed;
-    top: 80px;
-    right: 8px;
-    width: 16px;
-    height: 64px;
-    background: rgba(0, 229, 255, 0.2);
-    border-radius: 999px;
-    display: none;
-    align-items: center;
-    justify-content: center;
-    cursor: grab;
-    z-index: 2147483647;
-    transition: top 0.15s ease;
-  }
-  .oa-handle.oa-dragging {
-    cursor: grabbing;
-  }
-  .oa-handle.oa-collapsed {
-    display: flex;
-  }
-  .oa-handle::after {
-    content: '';
-    width: 6px;
-    height: 6px;
-    border-right: 2px solid rgba(0, 229, 255, 0.9);
-    border-bottom: 2px solid rgba(0, 229, 255, 0.9);
-    transform: rotate(-45deg);
-  }
-  .oa-handle.oa-collapsed::after {
-    transform: rotate(135deg);
   }
   .oa-header {
     padding: 12px 14px 10px;
@@ -650,24 +614,16 @@ collapseButton.type = 'button';
 collapseButton.className = 'oa-collapse-btn';
 collapseButton.setAttribute('aria-label', 'Toggle sidebar');
 
-const handleButton = document.createElement('button');
-handleButton.type = 'button';
-handleButton.className = 'oa-handle';
-handleButton.setAttribute('aria-label', 'Toggle sidebar handle');
-
 shadow.appendChild(style);
 shadow.appendChild(root);
 document.body.appendChild(host);
 document.head.appendChild(pageStyle);
-shadow.appendChild(handleButton);
-
 const initialCollapsed = isCollapsed();
 const initialTop = getStoredTop();
-applyTop(handleButton, initialTop);
 
 const toggleCollapsed = () => {
   const next = !sidebarElement?.classList.contains('oa-collapsed');
-  setCollapsed(sidebarElement, handleButton, next);
+  setCollapsed(sidebarElement, next);
 };
 
 collapseButton.addEventListener('click', toggleCollapsed);
@@ -699,7 +655,6 @@ const updateDrag = (event: MouseEvent) => {
   allowClick = false;
   const maxTop = window.innerHeight - dragTargetHeight - 16;
   const nextTop = clamp(event.clientY - dragOffset, 16, maxTop);
-  applyTop(handleButton, nextTop);
   applyTop(sidebarElement, nextTop);
 };
 
@@ -710,16 +665,11 @@ const endDrag = () => {
   isDragging = false;
   dragTarget?.classList.remove('oa-dragging');
   dragTarget = null;
-  const rect = handleButton.getBoundingClientRect();
-  window.localStorage.setItem(positionKey, String(rect.top));
-};
-
-handleButton.addEventListener('mousedown', (event) => {
-  if (!sidebarElement?.classList.contains('oa-collapsed')) {
-    return;
+  if (sidebarElement) {
+    const rect = sidebarElement.getBoundingClientRect();
+    window.localStorage.setItem(positionKey, String(rect.top));
   }
-  beginDrag(event, handleButton);
-});
+};
 
 document.addEventListener('mousemove', (event) => {
   updateDrag(event);
@@ -727,14 +677,6 @@ document.addEventListener('mousemove', (event) => {
 
 document.addEventListener('mouseup', () => {
   endDrag();
-});
-
-handleButton.addEventListener('click', (event) => {
-  if (!allowClick) {
-    event.preventDefault();
-    return;
-  }
-  toggleCollapsed();
 });
 
 const adapter = adapterMatch.create();
@@ -1458,5 +1400,5 @@ requestAnimationFrame(() => {
   }
   applyTop(sidebarElement, getStoredTop());
   applySidebarColor(sidebarElement, storedColor);
-  setCollapsed(sidebarElement, handleButton, isCollapsed());
+  setCollapsed(sidebarElement, isCollapsed());
 });
