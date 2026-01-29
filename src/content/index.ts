@@ -7,6 +7,8 @@ import { Sidebar } from '../ui/sidebar';
 const collapseKey = 'oa-sidebar-collapsed';
 const positionKey = 'oa-sidebar-top';
 const colorKey = 'oa-sidebar-color';
+const widthKey = 'oa-sidebar-width';
+const heightKey = 'oa-sidebar-height';
 const defaultColor = '#0a0f1a';
 
 const setCollapsed = (
@@ -36,6 +38,29 @@ const getStoredTop = () => {
 
 const getStoredColor = () =>
   window.localStorage.getItem(colorKey) ?? defaultColor;
+
+const getStoredSize = (key: string) => {
+  const raw = window.localStorage.getItem(key);
+  if (!raw) {
+    return null;
+  }
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const applySidebarWidth = (sidebar: HTMLElement | null, width: number) => {
+  if (!sidebar) {
+    return;
+  }
+  sidebar.style.setProperty('--oa-sidebar-width', `${width}px`);
+};
+
+const applySidebarHeight = (sidebar: HTMLElement | null, height: number) => {
+  if (!sidebar) {
+    return;
+  }
+  sidebar.style.setProperty('--oa-sidebar-height', `${height}px`);
+};
 
 const applySidebarColor = (sidebar: HTMLElement | null, color: string) => {
   if (sidebar) {
@@ -90,7 +115,8 @@ style.textContent = `
     position: fixed;
     top: 80px;
     right: 16px;
-    width: 280px;
+    width: var(--oa-sidebar-width, 280px);
+    height: var(--oa-sidebar-height, auto);
     max-height: calc(100vh - 120px);
     overflow: auto;
     background: #0a0f1a;
@@ -103,11 +129,43 @@ style.textContent = `
     z-index: 2147483647;
     transition: width 0.2s ease, padding 0.2s ease, top 0.15s ease, background 0.3s ease;
   }
+  .oa-sidebar.oa-resizing {
+    transition: none;
+  }
   .oa-sidebar.oa-collapsed {
     width: 40px;
     padding: 6px 4px;
     border-radius: 20px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1), 0 0 20px rgba(0, 229, 255, 0.05);
+  }
+  .oa-sidebar.oa-collapsed .oa-resize-handle {
+    display: none;
+  }
+  .oa-resize-handle {
+    position: absolute;
+    z-index: 2147483647;
+    background: transparent;
+    touch-action: none;
+    user-select: none;
+  }
+  .oa-resize-handle:hover {
+    background: rgba(0, 229, 255, 0.08);
+  }
+  .oa-resize-handle-ew {
+    top: 0;
+    right: -12px;
+    width: 12px;
+    height: 100%;
+    cursor: ew-resize;
+    border-radius: 0 12px 12px 0;
+  }
+  .oa-resize-handle-se {
+    right: -12px;
+    bottom: -12px;
+    width: 18px;
+    height: 18px;
+    cursor: nwse-resize;
+    border-radius: 12px;
   }
   .oa-header {
     padding: 12px 14px 10px;
@@ -677,6 +735,92 @@ document.addEventListener('mousemove', (event) => {
 
 document.addEventListener('mouseup', () => {
   endDrag();
+});
+
+type ResizeMode = 'width' | 'corner';
+
+let resizeMode: ResizeMode | null = null;
+let resizeStartX = 0;
+let resizeStartY = 0;
+let resizeStartWidth = 0;
+let resizeStartHeight = 0;
+
+const beginResize = (event: PointerEvent, mode: ResizeMode) => {
+  if (event.button !== 0) {
+    return;
+  }
+  if (!sidebarElement) {
+    return;
+  }
+  if (sidebarElement.classList.contains('oa-collapsed')) {
+    return;
+  }
+
+  resizeMode = mode;
+  resizeStartX = event.clientX;
+  resizeStartY = event.clientY;
+  const rect = sidebarElement.getBoundingClientRect();
+  resizeStartWidth = rect.width;
+  resizeStartHeight = rect.height;
+  sidebarElement.classList.add('oa-resizing');
+
+  (event.currentTarget as HTMLElement | null)?.setPointerCapture(event.pointerId);
+  event.preventDefault();
+  event.stopPropagation();
+};
+
+const updateResize = (event: PointerEvent) => {
+  if (!resizeMode) {
+    return;
+  }
+  if (!sidebarElement) {
+    return;
+  }
+
+  const minWidth = 220;
+  const maxWidth = Math.max(minWidth, window.innerWidth - 32);
+  const deltaX = resizeStartX - event.clientX;
+  const nextWidth = clamp(resizeStartWidth + deltaX, minWidth, maxWidth);
+  applySidebarWidth(sidebarElement, nextWidth);
+
+  if (resizeMode === 'corner') {
+    const minHeight = 160;
+    const rect = sidebarElement.getBoundingClientRect();
+    const maxHeight = Math.max(minHeight, window.innerHeight - rect.top - 16);
+    const deltaY = event.clientY - resizeStartY;
+    const nextHeight = clamp(resizeStartHeight + deltaY, minHeight, maxHeight);
+    applySidebarHeight(sidebarElement, nextHeight);
+    sidebarElement.style.maxHeight = `${maxHeight}px`;
+  }
+
+  event.preventDefault();
+  event.stopPropagation();
+};
+
+const endResize = () => {
+  if (!resizeMode) {
+    return;
+  }
+  resizeMode = null;
+
+  if (!sidebarElement) {
+    return;
+  }
+
+  sidebarElement.classList.remove('oa-resizing');
+  const rect = sidebarElement.getBoundingClientRect();
+  window.localStorage.setItem(widthKey, String(Math.round(rect.width)));
+  if (sidebarElement.style.getPropertyValue('--oa-sidebar-height')) {
+    window.localStorage.setItem(heightKey, String(Math.round(rect.height)));
+  }
+};
+
+document.addEventListener('pointermove', (event) => {
+  updateResize(event);
+});
+
+document.addEventListener('pointerup', () => {
+  endResize();
 });
 
 const adapter = adapterMatch.create();
@@ -1383,8 +1527,34 @@ if (
 
 requestAnimationFrame(() => {
   sidebarElement = shadow.querySelector('.oa-sidebar');
+  if (!sidebarElement) {
+    return;
+  }
   const header = shadow.querySelector<HTMLElement>('.oa-header');
   const colorInput = shadow.querySelector<HTMLInputElement>('.oa-color-picker');
+
+  const ensureResizeHandles = () => {
+    if (!sidebarElement) {
+      return;
+    }
+    if (sidebarElement.querySelector('.oa-resize-handle')) {
+      return;
+    }
+
+    const handleWidth = document.createElement('div');
+    handleWidth.className = 'oa-resize-handle oa-resize-handle-ew';
+    handleWidth.setAttribute('aria-hidden', 'true');
+    handleWidth.addEventListener('pointerdown', (event) => beginResize(event, 'width'));
+
+    const handleCorner = document.createElement('div');
+    handleCorner.className = 'oa-resize-handle oa-resize-handle-se';
+    handleCorner.setAttribute('aria-hidden', 'true');
+    handleCorner.addEventListener('pointerdown', (event) => beginResize(event, 'corner'));
+
+    sidebarElement.appendChild(handleWidth);
+    sidebarElement.appendChild(handleCorner);
+  };
+
   if (header) {
     header.appendChild(collapseButton);
     header.addEventListener('mousedown', (event) => beginDrag(event, header));
@@ -1398,7 +1568,24 @@ requestAnimationFrame(() => {
       window.localStorage.setItem(colorKey, color);
     });
   }
-  applyTop(sidebarElement, getStoredTop());
+
+  const initialTop = getStoredTop();
+  applyTop(sidebarElement, initialTop);
+
+  const storedWidth = getStoredSize(widthKey);
+  if (storedWidth) {
+    const minWidth = 220;
+    const maxWidth = Math.max(minWidth, window.innerWidth - 32);
+    applySidebarWidth(sidebarElement, clamp(storedWidth, minWidth, maxWidth));
+  }
+  const storedHeight = getStoredSize(heightKey);
+  if (storedHeight) {
+    const minHeight = 160;
+    const maxHeight = Math.max(minHeight, window.innerHeight - initialTop - 16);
+    sidebarElement.style.maxHeight = `${maxHeight}px`;
+    applySidebarHeight(sidebarElement, clamp(storedHeight, minHeight, maxHeight));
+  }
+  ensureResizeHandles();
   applySidebarColor(sidebarElement, storedColor);
   setCollapsed(sidebarElement, isCollapsed());
 });
