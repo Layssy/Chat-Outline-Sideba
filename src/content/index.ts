@@ -160,12 +160,28 @@ style.textContent = `
     border-radius: 0 12px 12px 0;
   }
   .oa-resize-handle-se {
-    right: -12px;
-    bottom: -12px;
-    width: 18px;
-    height: 18px;
+    right: 0;
+    bottom: 0;
+    width: 28px;
+    height: 28px;
     cursor: nwse-resize;
-    border-radius: 12px;
+    border-radius: 0 0 12px 0;
+  }
+  .oa-resize-handle-se::after {
+    content: '';
+    position: absolute;
+    right: 7px;
+    bottom: 7px;
+    width: 10px;
+    height: 10px;
+    border-right: 2px solid rgba(0, 229, 255, 0.35);
+    border-bottom: 2px solid rgba(0, 229, 255, 0.35);
+    border-radius: 0 0 2px 0;
+    pointer-events: none;
+  }
+  .oa-resize-handle-se:hover::after {
+    border-right-color: rgba(0, 229, 255, 0.8);
+    border-bottom-color: rgba(0, 229, 255, 0.8);
   }
   .oa-header {
     padding: 12px 14px 10px;
