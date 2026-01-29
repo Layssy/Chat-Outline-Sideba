@@ -173,6 +173,7 @@ style.textContent = `
     position: sticky;
     top: 0;
     z-index: 10;
+    background: inherit;
     display: flex;
     align-items: center;
     justify-content: flex-end;
