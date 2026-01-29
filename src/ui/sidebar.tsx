@@ -42,41 +42,43 @@ export function Sidebar({ adapter }: Props) {
 
   return (
     <div class="oa-sidebar">
-      <div class="oa-header">
-        <input
-          type="color"
-          class="oa-color-picker"
-          defaultValue="#0a0f1a"
-          aria-label="Change sidebar background"
-        />
-        <div class="oa-actions">
-          <button type="button" class="oa-btn" onClick={handleFoldAll}>
-            Fold All Answers
-          </button>
-          <button type="button" class="oa-btn" onClick={handleExpandAll}>
-            Expand All
-          </button>
-        </div>
-      </div>
-      <div class="oa-list">
-        {nodes.map((node) => (
-          <div key={node.id} class="oa-item">
-            <button
-              type="button"
-              class="oa-link"
-              onClick={() => adapter.scrollTo(node.id)}
-            >
-              {node.summary}
+      <div class="oa-scroll">
+        <div class="oa-header">
+          <input
+            type="color"
+            class="oa-color-picker"
+            defaultValue="#0a0f1a"
+            aria-label="Change sidebar background"
+          />
+          <div class="oa-actions">
+            <button type="button" class="oa-btn" onClick={handleFoldAll}>
+              Fold All Answers
             </button>
-            <button
-              type="button"
-              class="oa-toggle"
-              onClick={() => handleToggle(node.id)}
-            >
-              {foldedIds.has(node.id) ? 'Expand' : 'Fold'}
+            <button type="button" class="oa-btn" onClick={handleExpandAll}>
+              Expand All
             </button>
           </div>
-        ))}
+        </div>
+        <div class="oa-list">
+          {nodes.map((node) => (
+            <div key={node.id} class="oa-item">
+              <button
+                type="button"
+                class="oa-link"
+                onClick={() => adapter.scrollTo(node.id)}
+              >
+                {node.summary}
+              </button>
+              <button
+                type="button"
+                class="oa-toggle"
+                onClick={() => handleToggle(node.id)}
+              >
+                {foldedIds.has(node.id) ? 'Expand' : 'Fold'}
+              </button>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
